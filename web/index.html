@@ -1,0 +1,232 @@
+# Build-A-Board
+
+## General Idea
+
+This game is inspired by chess in its format; however, it allows the players to create their own pieces with custom moves and place them freely on their part of the board.
+Each player can create up to three different pieces and select, for each piece, how far it can move or capture in each of the eight directions. Pieces cannot move through other pieces, two pieces cannot occupy the same square, and capturing a piece will move you to its square.
+The board is 8×8 squares in size; at the beginning of each game, each player can place their pieces in the 3 rows closer to them. They're not allowed to see how the opponent places their pieces.
+During the game the players alternate in turns. During each turn, the player has to move a piece (either in a normal movement, or by capture) or the game will be considered a win for the other player.
+Each player has to also position a special piece - called "the king" - that can move by 1 square in any direction, but can't capture; if the opponent manages to capture that piece, they win. If the games goes on for sixty moves without any capture, or there is a three-fold repetition, the game is considered a draw.
+If any piece - except the king - manages to reach the furthermost rank then it will promote - similarly to Chess - to a "Queen" piece type which is able to both move and capture at any range in any direction.
+
+## Creating a piece
+
+!!!
+    [You can create your pieces directly from the UI by clicking here](PieceEditor.html). This will output a `setup()` function representing your choosen setup according to the instructions below.
+
+Each piece type is determined by how far it can move and capture in each of the eight directions, where the top distance allowed is of three squares:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+@dataclass
+class Range:
+    nw: int
+    n: int
+    ne: int
+    w: int
+    e: int
+    sw: int
+    s: int
+    se: int
+
+@dataclass
+class PieceType:
+    attack: Range
+    movement: Range
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+where all properties of `Range` are between 0 and 3 included. Note that `n` is always towards the opponent. *The player cannot have more than three different piece types*.
+
+As an example, this is how the king is defined:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+king = PieceType(Range(0, 0, 0, 0, 0, 0, 0, 0), Range(1, 1, 1, 1, 1, 1, 1, 1))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Note that if you have e.g. 3 as a range for attack or movement in a certain direction, you can still move or capture pieces that are 1 or 2 squares far in that direction. The range is the maximum distance the piece can move or attack.
+
+The points required to "build" each piece of a given type are calculated through this function:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+movementPrices = Range(3, 4, 3, 2, 2, 1, 1, 1)
+attackPrices = Range(4, 5, 4, 3, 3, 2, 2, 2)
+
+def dotProduct(a: Range, b: Range) -> int:
+    return sum(getattr(a, property) * getattr(b, property)
+        for property in ('n', 'nw', 'ne', 'e', 'w', 's', 'sw', 'se'))
+
+def pricePerUnit(p: PieceType) -> int:
+    return 10 + \
+        dotProduct(p, movementPrices) + \
+        dotProduct(p, attackPrices)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+You have a total of **200** points to create as many pieces of each type you want, as long as don't have more than three different piece types (the king doesn't count). Each piece is then defined as:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+@dataclass
+class Piece:
+    type: PieceType
+    rank: int
+    file: int
+
+    def __hash__(self): return id(self)
+    def __eq__(self, other): return self is other
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Here **rank** and **file** have the same meanings as in chess (ranks are the eight rows, and files are the eight columns) and have values from 0 to 7 included; they uniquely determine the position of the piece.
+
+Finally, you can create and place your pieces by returning them in a function called `setup`. The king must always be included:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+def setup():
+
+    exampleType = PieceType(
+        attack = Range(1, 0, 1, 0, 0, 1, 0, 1)
+        movement = Range(0, 1, 0, 1, 1, 0, 0, 0)
+    )
+
+    return [
+        Piece(exampleType, 2, 3),
+        Piece(exampleType, 0, 0),
+        Piece(exampleType, 1, 5),
+        Piece(king, 1, 1)
+    ]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Please note that **at the start of the game, you can only position pieces in ranks 0 to 2**.
+
+!!!
+    If you try to place pieces that use more than three different PieceTypes *or* the sum of the `pricePerUnit(piece.type)` over the placed pieces over higher than 200 you're automatically disqualified. Your script has *up to 5 seconds* to place the pieces once it's started.
+
+## Making a move
+
+One of the two player will start with the first move; then, the two players alternate in making their move.
+
+Your script has to provide a `move(b: Board, c: Clock) -> Move` function to be called whenever it's your turn to make a move. You're allowed to store information between moves through global variables. Classes `Board`, `Clock` and `Move` are defined as follow:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+@dataclass
+class Board:
+
+    # This contains the list of opponent's pieces on the board
+    opponent: tuple[Piece]
+
+    # This contains the list of your pieces on the board
+    player: tuple[Piece]
+
+    # You can use this function to check if a move is valid or not
+    def check_move(self, m: Move) -> bool:
+        ...
+
+@dataclass
+class Clock:
+
+    # The number of moves happened since the start of the games
+    plys: int
+
+    # How much time, in seconds, you have left
+    time: float
+
+    # How much time your opponent has left
+    opponent_time: float
+
+    # The amount of time you started with at the beginning of the game
+    total_time: int
+
+    # The amount of seconds that are added to
+    # the time you have left at each move
+    increment: int
+
+@dataclass
+class Move:
+
+    # The piece you want to move
+    piece: Piece
+
+    # Where you want to move it
+    rank: int
+        file: int
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In order to **capture** an opponent's piece, simply move the piece to where it is placed. Since an invalid move will immediately result in losing the game, you can use the function `board.check_move` before playing to make sure that doesn't happen. Note that you also lose if your function takes more time to return a `Move` than you have left.
+
+!!!
+    Please note that **north** on the **opponent** pieces is the same direction as **north** on **your** pieces: **towards the opponent**. Also, directly changing any of the values of the provided board or clock will make you lose the game immediately. If you're unable to make any valid move, feel free to return `None` or any other invalid move: you lost!
+
+If you move a piece to the last rank (with index 7, starting to count from 0) then it its `.type` property will be changed to `queen = PieceType(Range(8, 8, 8, 8, 8, 8, 8, 8), Range(8, 8, 8, 8, 8, 8, 8, 8))`. This `PieceType` is exposed to you through the name `queen`.
+
+## End of the game
+
+This was everything required by you. The game will automatically end if any of the above mentioned events occour (time runs out, invalid move, invalid piece setup, three-fold-repetition or sixty-move rule, all pieces captured) and the rating of you and your opponent will be adjusted accordingly.
+
+Please note that, in order to qualify for the event, you have to submit a python script to (link goes here); you can change the script any amount of times during the duration of the event. If a game is ongoing, changes will take effect on the following game.
+
+## Example
+
+This is an example game script, to see what is expected of you; this script is clearly not optimal, and likely wouldn't win any match, but I'm sure you can improve it:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ python
+pawn = PieceType(
+    attack = Range(1, 0, 1, 0, 0, 0, 0, 0),
+    movement = Range(0, 1, 0, 0, 0, 0, 0, 0)
+)
+runner = PieceType(
+    attack = Range(0, 0, 0, 0, 0, 0, 0, 0),
+    movement = Range(0, 2, 0, 0, 0, 0, 0, 0)
+)
+
+place(
+    Piece(pawn, 2, 2),
+    Piece(pawn, 2, 3),
+    Piece(runner, 2, 0),
+    Piece(runner, 2, 7)
+)
+
+def move(b: Board, c: Clock) -> Move:
+    possible_moves = []
+    for piece in b.player:
+        if piece.type == pawn:
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file + 1))
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file - 1))
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file))
+        elif piece.type == runner:
+            possible_moves.append(Move(piece, piece.rank + 2, piece.file))
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file))
+        elif piece.type == queen:
+            for opponent_piece in b.opponent:
+                possible_moves.append(Move(piece, opponent_piece.rank, opponent_piece.file))
+    for move in possible_moves:
+        if b.check_move(move): return move
+    # Looks like we are out of legal moves. We lost!
+    return
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you'd like to see (much) more complex examples, builtin_ai2 contains a minimax function, whereas builtin_ai3 generates hundreds of possible lines with random moves and checks which starting move more often results in better positions. Both can be vastly improved in many ways and you can use them as a base, but you can also start something from scratch.
+
+# Implementation details
+
+## Technical Limitations
+
+Your code will be run in a restricted environment for safety purposes. Any attempt to break out of it will result into:
+
+- Your code being disqualified from the competition
+
+- You being banned, until further notice, from Pycon Italia.
+
+- You being banned, until further notice, from any Pycon event.
+
+- You being banned from ever using the Python programming language again.
+
+- If your code is successful in breaking out the restricted environment and this affects the result of the competition, kidnapping of close familiars is on the table. The amount of people kidnapped will be proportional to the amount of disruption you'll cause, and it will happen from your youngest relative to the oldest.
+
+Remember that we're all here to have fun, and trying to break the game for everyone is anything but funny. (Especially to the organizers).
+
+**Jokes aside**, not all Python functionality is available and you can use only a subset of Python libraries, listed below. As an example, you cannot interact with the filesystem. You can use "print", and you'll receive a message containing everything that has been printed with your program.
+
+## Time and RAM / CPU usage
+
+You will be given a defined amount of time to return your move; this is specified by the `Clock` classe defined above. A set amount of time is awarded to both programs competing at the start of the game, and at each move an increment will be added to the time they have left.
+
+Currently, RAM / CPU usage has no strict limit, but you should make sure your script does not use a *disproportionate* amount of memory. Organizers reserve to decide on the exact definition of "disproportionate".
+
+<!-- Markdeep: --><style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style><script src="markdeep.min.js" charset="utf-8"></script><script src="https://morgan3d.github.io/markdeep/latest/markdeep.min.js" charset="utf-8"></script><script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

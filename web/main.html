@@ -1,0 +1,295 @@
+<html>
+    <head>
+        <script type="text/javascript" src="/eel.js"></script>
+
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+
+        <base href="http://chessboardjs.com/" />
+        <link rel="stylesheet" href="/css/chessboard.css" />
+
+        <style>
+            #board1 {
+                width: 700px;
+                height: 700px;
+                margin: auto;
+            }
+
+            #playera {
+                position: absolute;
+                top: 850px;
+                left: 10px;
+                height: 50px;
+                width: calc(50% - 20px);
+            }
+
+            #playerb {
+                position: absolute;
+                top: 850px;
+                right: 10px;
+                height: 50px;
+                width: calc(50% - 20px);
+            }
+
+            #start {
+                position: absolute;
+                top: 750px;
+                height: 50px;
+                right: 25%;
+                left: 25%;
+            }
+
+            #codea {
+                position: absolute;
+                top: 950px;
+                left: 10px;
+                bottom: 10px;
+                width: calc(50% - 20px);
+            }
+
+            #codeb {
+                position: absolute;
+                top: 950px;
+                right: 10px;
+                bottom: 10px;
+                width: calc(50% - 20px);
+            }
+
+            #texta {
+                position: absolute;
+                top: 900px;
+                left: 13px;
+            }
+
+            #textb {
+                position: absolute;
+                top: 900px;
+                right: 13px;
+            }
+
+            textarea {
+                font-family:Consolas,Monaco,Lucida Console,Liberation Mono,DejaVu Sans Mono,Bitstream Vera Sans Mono,Courier New, monospace;
+            }
+
+        </style>
+    </head>
+    <body>
+        <script src="/js/chess.js"></script>
+        <script src="/js/jquery-1.10.1.min.js"></script>
+        <script src="/js/chessboard.js"></script>
+
+        <div id="board1" style="width: 700px;"></div>
+
+        <button id="start" onclick="startNewGame()">Start Game</button>
+
+        <p id="texta">Test</p>
+
+        <p id="textb">Test</p>
+
+        <select id="playera" onchange="updateBoxes(this, 'a')">
+            <option value="Human" selected="selected">Human</option>
+            <option value="Custom Script">Custom Script</option>
+            <option value="Builtin AI">Builtin AI</option>
+        </select>
+
+        <select id="playerb" onchange="updateBoxes(this, 'b')">
+            <option value="Human">Human</option>
+            <option value="Custom Script">Custom Script</option>
+            <option value="Builtin AI" selected="selected">Builtin AI</option>
+        </select>
+
+        <textarea id="codea"></textarea>
+
+        <textarea id="codeb"></textarea>
+
+        <script>
+
+            var whiteSquareGrey = '#a9a9a9'
+            var blackSquareGrey = '#696969'
+            let allValidMoves = {}
+
+            function updateBoxes(el, c) {
+                value = el.value
+                console.log(c)
+                if (value == "Builtin AI") {
+                    console.log('done', el.value)
+                    document.getElementById('code'+c).style.display = 'none'
+                    document.getElementById('text'+c).style.display = 'none'
+                } else {
+                    if (value == "Human") {
+                        document.getElementById('text'+c).innerHTML = "Set your starting position here:"
+                        document.getElementById('code'+c).value = template
+                    } else {
+                        document.getElementById('text'+c).innerHTML = "Copy your code here:"
+                        document.getElementById('code'+c).value = fullTemplate
+                    }
+                    document.getElementById('code'+c).style.display = 'block'
+                    document.getElementById('text'+c).style.display = 'inline'
+                }
+            }
+
+            function removeGreySquares () {
+                $('#board1 .square-55d63').css('background', '')
+            }
+
+            function greySquare (square) {
+                var $square = $('#board1 .square-' + square)
+                console.log('->', $square)
+
+                var background = whiteSquareGrey
+                if ($square.hasClass('black-3c85d')) {
+                    background = blackSquareGrey
+                }
+
+                $square.css('background', background)
+            }
+
+            function onDrop (source, target, piece, newPos, oldPos, orientation) {
+                if (!(source in allValidMoves)) return 'snapback';
+                if (!allValidMoves[source].includes(target)) {
+                    return 'snapback'
+                }
+                eel.moveDone(source, target)
+            }
+
+            function onMouseoutSquare (square, piece) {
+                removeGreySquares()
+            }
+
+            function onMouseoverSquare(square, piece) {
+                if (allValidMoves[square].length === 0) return;
+                if (!(square in allValidMoves)) return;
+                greySquare(square)
+                for (var i = 0; i < allValidMoves[square].length; i++) {
+                    greySquare(allValidMoves[square][i])
+                }
+            }
+
+            function startNewGame() {
+                eel.newGame(
+                    document.getElementById('playera').value,
+                    document.getElementById('playerb').value,
+                    document.getElementById('codea').value,
+                    document.getElementById('codeb').value
+                )
+            }
+
+            var config = {
+                draggable: true,
+                pieceTheme: 'img/chesspieces/wikipedia/{piece}.png',
+                position: 'empty',
+                onDrop: onDrop,
+                onMouseoutSquare: onMouseoutSquare,
+                onMouseoverSquare: onMouseoverSquare
+            }
+
+            var board = Chessboard('board1', config)
+
+            eel.expose(pySetPosition)
+            function pySetPosition(value, moves) {
+                board.position(value)
+                allValidMoves = moves
+            }
+
+            eel.expose(pySetMoves)
+            function pySetMoves( moves) {
+                allValidMoves = moves
+            }
+
+            eel.expose(receiveMove)
+            function receiveMove(move) {
+                board.move(move)
+            }
+
+            eel.expose(fuck)
+            function fuck(error) {
+                alert(error)
+            }
+
+            let template = `# You will be playing manually, but a setup function is still required, e.g.:
+from buildaboard import Range, PieceType, Piece, Move, Board, Clock, king, queen, files, ranks
+from time import sleep, time
+
+def setup():
+
+    pawn = PieceType(
+        Range(1, 0, 1, 0, 0, 0, 0, 0),
+        Range(0, 1, 0, 0, 0, 0, 0, 0)
+        )
+
+    runner = PieceType(
+        attack = Range(0, 0, 0, 0, 0, 0, 0, 0),
+        movement = Range(0, 2, 0, 0, 0, 0, 0, 0)
+    )
+
+    return [Piece(pawn, 1, 2),
+            Piece(pawn, 1, 3),
+            Piece(pawn, 1, 4),
+            Piece(runner, 1, 1),
+            Piece(runner, 1, 6),
+            Piece(king, 2, 4)]`
+
+            let fullTemplate = `from buildaboard import Range, PieceType, Piece, Move, Board, Clock, king, queen, files, ranks
+from time import sleep, time
+
+def setup():
+
+    pawn = PieceType(
+        Range(1, 0, 1, 0, 0, 0, 0, 0),
+        Range(0, 1, 0, 0, 0, 0, 0, 0)
+        )
+
+    runner = PieceType(
+        attack = Range(0, 0, 0, 0, 0, 0, 0, 0),
+        movement = Range(0, 2, 0, 0, 0, 0, 0, 0)
+    )
+
+    return [Piece(pawn, 1, 2),
+            Piece(pawn, 1, 3),
+            Piece(runner, 1, 1),
+            Piece(runner, 1, 6),
+            Piece(king, 2, 4)]
+
+def move(b, c) -> Move:
+
+    queen = PieceType(
+        Range(8, 8, 8, 8, 8, 8, 8, 8),
+        Range(8, 8, 8, 8, 8, 8, 8, 8)
+    )
+
+    pawn = PieceType(
+        Range(1, 0, 1, 0, 0, 0, 0, 0),
+        Range(0, 1, 0, 0, 0, 0, 0, 0)
+        )
+
+    runner = PieceType(
+        attack = Range(0, 0, 0, 0, 0, 0, 0, 0),
+        movement = Range(0, 2, 0, 0, 0, 0, 0, 0)
+    )
+
+    sleep(0.2)
+
+    possible_moves = []
+    for piece in b.player:
+        if piece.type == pawn:
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file + 1))
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file - 1))
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file))
+        elif piece.type == runner:
+            possible_moves.append(Move(piece, piece.rank + 2, piece.file))
+            possible_moves.append(Move(piece, piece.rank + 1, piece.file))
+        elif piece.type == queen:
+            for opponent_piece in b.opponent:
+                print(opponent_piece)
+                possible_moves.append(Move(piece, opponent_piece.rank, opponent_piece.file))
+        else:
+            print('Oh no, I have a weird piece type:', piece.type)
+    for move in possible_moves:
+        if b.check_move(move): return move
+    # Looks like we are out of legal moves. We lost!
+    return`
+
+            updateBoxes(document.getElementById('playera'), 'a')
+            updateBoxes(document.getElementById('playerb'), 'b')
+        </script>
+    </body>
+</html>
